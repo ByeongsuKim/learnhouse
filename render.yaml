@@ -1,0 +1,104 @@
+# Render Blueprint for LearnHouse
+# https://render.com/docs/blueprint-spec
+#
+# Creates the all-in-one app container (web + api + collab behind nginx),
+# a PostgreSQL database (pgvector is enabled by the API on startup) and a
+# Redis-compatible Key Value instance.
+
+services:
+  - type: web
+    name: learnhouse
+    runtime: docker
+    region: singapore
+    plan: standard
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: sh /app/render-start.sh
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    disk:
+      name: learnhouse-content
+      mountPath: /app/api/content
+      sizeGB: 10
+    envVars:
+      # Render forwards traffic to this port (nginx). render-start.sh resets
+      # PORT to 8000 for the Next.js server inside the container.
+      - key: PORT
+        value: "80"
+
+      # Uncomment and set to serve from a custom domain instead of
+      # <service>.onrender.com.
+      # - key: LEARNHOUSE_DOMAIN
+      #   value: learn.example.com
+
+      - key: NEXT_PUBLIC_LEARNHOUSE_MULTI_ORG
+        value: "False"
+      - key: NEXT_PUBLIC_LEARNHOUSE_DEFAULT_ORG
+        value: default
+      - key: NEXT_PUBLIC_LEARNHOUSE_HTTPS
+        value: "True"
+      - key: LEARNHOUSE_TENANCY
+        value: single
+      - key: LEARNHOUSE_PORT
+        value: "9000"
+      - key: LEARNHOUSE_API_URL
+        value: http://localhost:9000
+      - key: HOSTNAME
+        value: 0.0.0.0
+
+      - key: LEARNHOUSE_SQL_CONNECTION_STRING
+        fromDatabase:
+          name: learnhouse-db
+          property: connectionString
+      - key: LEARNHOUSE_REDIS_CONNECTION_STRING
+        fromService:
+          type: keyvalue
+          name: learnhouse-redis
+          property: connectionString
+      - key: LEARNHOUSE_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: learnhouse-redis
+          property: connectionString
+
+      - key: NEXTAUTH_SECRET
+        generateValue: true
+      - key: LEARNHOUSE_AUTH_JWT_SECRET_KEY
+        generateValue: true
+      - key: COLLAB_INTERNAL_KEY
+        generateValue: true
+
+      # Prompted once when the Blueprint is created.
+      - key: LEARNHOUSE_INITIAL_ADMIN_EMAIL
+        sync: false
+      - key: LEARNHOUSE_INITIAL_ADMIN_PASSWORD
+        sync: false
+      - key: LEARNHOUSE_INITIAL_ORG_NAME
+        sync: false
+      - key: LEARNHOUSE_INITIAL_ORG_SLUG
+        value: default
+
+      - key: LEARNHOUSE_DEVELOPMENT_MODE
+        value: "False"
+      - key: LEARNHOUSE_LOGFIRE_ENABLED
+        value: "False"
+      - key: LEARNHOUSE_IS_AI_ENABLED
+        value: "False"
+      - key: LEARNHOUSE_CONTENT_DELIVERY_TYPE
+        value: filesystem
+
+  - type: keyvalue
+    name: learnhouse-redis
+    region: singapore
+    plan: starter
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+databases:
+  - name: learnhouse-db
+    region: singapore
+    plan: basic-256mb
+    postgresMajorVersion: "16"
+    databaseName: learnhouse
+    user: learnhouse
+    ipAllowList: []
